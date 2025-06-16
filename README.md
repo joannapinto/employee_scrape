@@ -59,7 +59,7 @@ This project is a Python-based scraper designed to fetch, process, and normalize
    ```bash
    git clone https://github.com/yourusername/employee-data-scraper.git
    cd employee-data-scraper
-````
+   ````
 
 2. Create and activate a virtual environment:
 
