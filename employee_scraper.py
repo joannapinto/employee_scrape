@@ -1,69 +1,52 @@
 import pandas as pd
+import requests
+
+def fetch_employee_data(url):
+    response = requests.get(url)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        raise Exception(f"Failed to fetch data. Status code: {response.status_code}")
 
 def normalize_employee_data(data):
-    """
-    Normalizes the given employee data and returns a pandas DataFrame.
-    """
-    print("Normalizing data...")
-    
-    # Convert input data to a DataFrame
     df = pd.DataFrame(data)
-
-    # Ensure all expected columns are present
     expected_columns = ['first_name', 'last_name', 'phone', 'email', 'gender', 
-                        'age', 'salary', 'department', 'hire_date', 'designation']
+                        'age', 'job_title', 'years_of_experience', 'salary', 
+                        'department', 'hire_date']
     for col in expected_columns:
         if col not in df.columns:
-            # Default values for missing columns
-            df[col] = 'Missing' if col not in ['age', 'salary'] else 0
+            df[col] = None
+
+    # Handle missing last names
+    df['last_name'] = df['last_name'].fillna("Missing")
+
+    # Handle invalid phone numbers
+    df['phone'] = df['phone'].apply(lambda x: "Invalid Number" if not str(x).isdigit() else x)
 
     # Add a Full Name column
-    df['Full Name'] = df['first_name'] + ' ' + df['last_name']
+    df['Full Name'] = (df['first_name'] + ' ' + df['last_name']).astype("string")
 
-    # Normalize data types
-    df = df.astype({
-        'first_name': 'string',
-        'last_name': 'string',
-        'phone': 'string',
-        'email': 'string',
-        'gender': 'string',
-        'age': 'int',
-        'salary': 'float',
-        'department': 'string',
-        'hire_date': 'string',
-        'designation': 'string',
-        'Full Name': 'string'
-    })
+    # Convert salary to float
+    df['salary'] = df['salary'].fillna(0).astype(float)
 
-    # Handle missing or invalid data
-    df['gender'] = df['gender'].replace({'': 'Unknown', None: 'Unknown'})
-    df['phone'] = df['phone'].fillna('Unknown')
-    df['email'] = df['email'].fillna('Missing')
-    df['hire_date'] = pd.to_datetime(df['hire_date'], errors='coerce')  # Handle invalid dates
+    # Convert hire_date to datetime
+    df['hire_date'] = pd.to_datetime(df['hire_date'], errors='coerce')
 
-    print("Normalization process completed.")
+    # Assign designation based on years of experience
+    df['designation'] = pd.cut(df['years_of_experience'],
+                                bins=[-1, 3, 5, 10, float('inf')],
+                                labels=["System Engineer", "Senior Data Engineer", "Lead Engineer", "Principal Engineer"],
+                                include_lowest=True,
+                                right=True)
+
     return df
 
-
 if __name__ == "__main__":
-    SAMPLE_DATA = [
-        {
-            "first_name": "John",
-            "last_name": "Doe",
-            "phone": "12345",
-            "gender": "Male",
-            "age": 30,
-            "salary": 50000,
-            "department": "Engineering",
-            "hire_date": "2023-01-15",
-            "email": "john.doe@example.com",
-            "designation": "Data Engineer"
-        }
-    ]
+    API_URL = "https://api.slingacademy.com/v1/sample-data/files/employees.json"
     try:
-        df = normalize_employee_data(SAMPLE_DATA)
-        print(df)
-        df.to_csv("normalized_data.csv", index=False)
-        print("Data saved to normalized_data.csv")
+        raw_data = fetch_employee_data(API_URL)
+        normalized_data = normalize_employee_data(raw_data)
+        normalized_data.to_json("employees.json", orient="records", indent=4, date_format="iso")
+        print("Data saved to employees.json")
     except Exception as e:
         print(f"An error occurred: {e}")
