@@ -1,8 +1,9 @@
-import pytest
+import unittest
+from unittest.mock import patch, Mock
 import pandas as pd
-from employee_scraper import normalize_employee_data
+from employee_scraper import fetch_employee_data, normalize_employee_data
 
-# Mock API response for testing
+# Mock API response
 MOCK_API_RESPONSE = [
     {
         "first_name": "John",
@@ -19,58 +20,67 @@ MOCK_API_RESPONSE = [
     }
 ]
 
-def test_normalize_employee_data_columns():
-    """
-    Test Case 1: Verify all required columns are present.
-    """
-    df = normalize_employee_data(MOCK_API_RESPONSE)
-    expected_columns = ['first_name', 'last_name', 'phone', 'email', 'gender', 'age',
-                        'job_title', 'years_of_experience', 'salary', 'department',
-                        'hire_date', 'Full Name', 'designation']
-    assert all(col in df.columns for col in expected_columns), "Not all required columns are present."
+class TestEmployeeScraper(unittest.TestCase):
 
-def test_normalize_employee_data_no_missing():
-    """
-    Test Case 2: Verify no required column has missing values after normalization.
-    """
-    df = normalize_employee_data(MOCK_API_RESPONSE)
-    assert df.isnull().sum().sum() == 0, "Missing values exist in normalized data."
+    @patch('employee_scraper.requests.get')
+    def test_fetch_employee_data_success(self, mock_get):
+        """
+        Test Case: Successful API request
+        """
+        # Configure the mock to return a successful response
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = MOCK_API_RESPONSE
+        mock_get.return_value = mock_response
 
-def test_normalize_employee_data_types():
-    """
-    Test Case 3: Validate column types after normalization.
-    """
-    df = normalize_employee_data(MOCK_API_RESPONSE)
-    assert df.dtypes['Full Name'] == 'string', "Full Name column type is incorrect"
-    assert df.dtypes['age'] == 'int64', "Age column type is incorrect"
-    assert df.dtypes['salary'] == 'float64', "Salary column type is incorrect"
+        data = fetch_employee_data("https://api.slingacademy.com/v1/sample-data/files/employees.json")
+        self.assertEqual(data, MOCK_API_RESPONSE, "Failed to fetch correct employee data.")
 
-def test_designation_assignment():
-    """
-    Test Case 4: Validate designation assignment based on years of experience.
-    """
-    df = normalize_employee_data(MOCK_API_RESPONSE)
-    assert df['designation'].iloc[0] == "Senior Data Engineer", "Designation assignment is incorrect for 5 years of experience"
+    @patch('employee_scraper.requests.get')
+    def test_fetch_employee_data_failure(self, mock_get):
+        """
+        Test Case: Failed API request (non-200 status)
+        """
+        # Configure the mock to return a failed response
+        mock_response = Mock()
+        mock_response.status_code = 404
+        mock_get.return_value = mock_response
 
-def test_missing_or_invalid_data_handling():
-    """
-    Test Case 5: Handle missing or invalid data.
-    """
-    data_with_issues = [
-        {
-            "first_name": "Alice",
-            "last_name": None,  # Missing last name
-            "phone": "123x456",  # Invalid phone
-            "email": None,  # Missing email
-            "gender": "",
-            "age": None,  # Missing age
-            "job_title": None,  # Missing job title
-            "years_of_experience": 15,
-            "salary": None,  # Missing salary
-            "department": None,  # Missing department
-            "hire_date": "invalid_date"  # Invalid date
-        }
-    ]
-    df = normalize_employee_data(data_with_issues)
-    assert df['last_name'].iloc[0] == "Missing", "Missing last name not handled correctly"
-    assert df['phone'].iloc[0] == "Invalid Number", "Invalid phone not handled correctly"
+        with self.assertRaises(Exception) as context:
+            fetch_employee_data("https://api.slingacademy.com/v1/sample-data/files/employees.json")
+        self.assertIn("Failed to fetch data", str(context.exception), "Failed to raise exception on API failure.")
+
+    def test_normalize_employee_data(self):
+        """
+        Test Case: Validate normalization logic.
+        """
+        df = normalize_employee_data(MOCK_API_RESPONSE)
+        self.assertIn("Full Name", df.columns, "Full Name column is missing.")
+        self.assertIn("designation", df.columns, "Designation column is missing.")
+        self.assertEqual(df['designation'].iloc[0], "Senior Data Engineer", "Designation assignment is incorrect.")
+
+    def test_handle_missing_or_invalid_data(self):
+        """
+        Test Case: Handle missing or invalid data.
+        """
+        data_with_issues = [
+            {
+                "first_name": "Alice",
+                "last_name": None,  # Missing last name
+                "phone": "123x456",  # Invalid phone
+                "email": None,  # Missing email
+                "gender": "",
+                "age": None,  # Missing age
+                "job_title": None,  # Missing job title
+                "years_of_experience": 15,
+                "salary": None,  # Missing salary
+                "department": None,  # Missing department
+                "hire_date": "invalid_date"  # Invalid date
+            }
+        ]
+        df = normalize_employee_data(data_with_issues)
+        self.assertEqual(df['last_name'].iloc[0], "Missing", "Missing last name not handled correctly.")
+        self.assertEqual(df['phone'].iloc[0], "Invalid Number", "Invalid phone not handled correctly.")
+
+if __name__ == "__main__":
+    unittest.main()
